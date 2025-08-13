@@ -6,16 +6,28 @@ import numpy as np
 class Vision():
     def __init__(self, imgPath):
         self.img = cv2.cvtColor(cv2.imread(imgPath), cv2.COLOR_BGR2RGB)
+        self.startImg = cv2.cvtColor(cv2.imread("start.png"), cv2.COLOR_BGR2RGB)
         pytesseract.pytesseract.tesseract_cmd = 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'
+
+    def findStart(self):
+        curImg = self.img.copy()
+        threshold = 0.5
+        method = cv2.TM_CCOEFF_NORMED
+        res = cv2.matchTemplate(curImg, self.startImg, method)
+        _, max_val, _, _ = cv2.minMaxLoc(res)
+        print(max_val)
+
+        return max_val >= threshold
+
     
     def findTemp(self, templates):
         #define variables
         curImg = self.img.copy()
-        threshold = 0.5
+        threshold = 0.49
         method = cv2.TM_CCOEFF_NORMED
 
         #returns
-        elixir_img = None
+        elixir_img = curImg[1482:1542, 630:720]
         cardCoors = []
 
         #check to see which templates are in current game state
@@ -43,11 +55,7 @@ class Vision():
                         bottom_right = (x+w, y+h)
                         cv2.rectangle(curImg, top_left, bottom_right, (0, 255, 0), 2)
 
-                        if filename == "elixir.png":
-                            print("HELLO")
-                            elixir_img = curImg[y:(y+h), x:(x+w)]
-                        else:
-                            cardCoors.append([filename[:-4], y+(h/2), x+(w/2)])
+                        cardCoors.append([filename[:-4], y+(h/2), x+(w/2)])
         
         # You can now show the image with the matches highlighted
         scale_percent = 40
@@ -61,11 +69,13 @@ class Vision():
         
 
         # You can now show the resized image with the matches highlighted
+        """
         cv2.imshow('Matches Found', curImg)
         # --- END OF NEW CODE ---
         
         cv2.waitKey(0)
         cv2.destroyAllWindows()
+        """
 
         return elixir_img, cardCoors
 
@@ -101,5 +111,22 @@ class Vision():
             elixir_count = int(number_string)
             return elixir_count
         except ValueError:
-            print(f"OCR failed to convert '{number_string}' to an integer.")
-            return -1
+            gray_image = cv2.cvtColor(elixir_image, cv2.COLOR_BGR2GRAY)
+    
+            # Use Otsu's thresholding, which automatically finds the best threshold value
+            # This is often more reliable than a fixed threshold.
+            _, processed_image = cv2.threshold(gray_image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            
+            # --- Perform OCR ---
+            # Use Pytesseract with a whitelist for digits.
+            # We will stick with psm 6, as it is often correct for this kind of input.
+            config = '-c tessedit_char_whitelist=0123456789 --psm 6'
+            number_string = pytesseract.image_to_string(processed_image, config=config).strip()
+            
+            # --- Convert the result to an integer ---
+            try:
+                elixir_count = int(number_string)
+                return elixir_count
+            except ValueError:
+                print(f"OCR failed to convert '{number_string}' to an integer.")
+                return -1

@@ -16,7 +16,7 @@ class Photography():
         with open(filename, "wb") as fp:
             fp.write(self.result)
 
-        return self.result, filename
+        return filename
     
     def deletePicture(self, filename):
         wd = os.getcwd()
