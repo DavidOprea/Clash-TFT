@@ -36,3 +36,6 @@ class Mouse():
             
         # Release the mouse button
         pydirectinput.mouseUp(button='left')
+    
+    def left_click(self, x, y):
+        pydirectinput.click(x, y)

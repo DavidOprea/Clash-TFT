@@ -11,11 +11,17 @@ class Decider():
                       "goblin machine" : 4, "skeleton king" : 5,
                       "golden knight" : 5, "archer queen" : 5}
         self.on_field = []
-        self.curMax = 1
+        self.curMax = 4
     
     def decide(self, cards, curElixir):
-        for i in range(3):
-            if((len(self.on_field) < self.curMax or cards[i][0] in self.on_fields) and 
+        print(self.on_field)
+        for i in range(len(cards)):
+            if((len(self.on_field) < self.curMax or cards[i][0] in self.on_field) and 
                self.costs[cards[i][0]] <= curElixir):
+                if(cards[i][0] not in self.on_field):
+                    self.on_field.append(cards[i][0])
                 return self.coors[i], self.costs[cards[i][0]]
         return -1, 0
+    
+    def upMax(self):
+        self.curMax += 1
