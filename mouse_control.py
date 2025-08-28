@@ -38,4 +38,15 @@ class Mouse():
         pydirectinput.mouseUp(button='left')
     
     def left_click(self, x, y):
+        abs_x = self.window.left
+        abs_y = self.window.top
+        x += abs_x
+        y += abs_y
         pydirectinput.click(x, y)
+
+    def move_to(self, x, y):
+        abs_x = self.window.left
+        abs_y = self.window.top
+        x += abs_x
+        y += abs_y
+        pydirectinput.moveTo(x, y)

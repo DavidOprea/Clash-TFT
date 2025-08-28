@@ -2,6 +2,7 @@ import os
 import cv2
 import pytesseract
 import numpy as np
+import math
 
 class Vision():
     def __init__(self, imgPath):
@@ -9,6 +10,7 @@ class Vision():
         self.startImg1 = cv2.cvtColor(cv2.imread("start.png"), cv2.COLOR_BGR2RGB)
         self.startImg2 = cv2.cvtColor(cv2.imread("start1.png"), cv2.COLOR_BGR2RGB)
         self.play_again = cv2.cvtColor(cv2.imread("play_again.png"), cv2.COLOR_BGR2RGB)
+        self.empty_tile = cv2.cvtColor(cv2.imread("tile.png"), cv2.COLOR_BGR2GRAY)
         self.quit = cv2.cvtColor(cv2.imread("quit.png"), cv2.COLOR_BGR2RGB)
         pytesseract.pytesseract.tesseract_cmd = 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'
 
@@ -42,13 +44,13 @@ class Vision():
         return max_val >= threshold
 
     
-    def findTemp(self, templates):
+    def findTemps(self, templates):
         #define variables
         curImg = self.img
         threshold = 0.49
         method = cv2.TM_CCOEFF_NORMED
 
-        #returns
+        #returns 1510 675 around 2.1
         elixir_img = curImg[1482:1542, 630:720]
         cardCoors = []
 
@@ -136,7 +138,80 @@ class Vision():
                 cur = i
         
         return cur
+
+    def checkBoardForTroop(self, coors):
+        size = 15
+        curImg = self.img
+        worst = [-100, 0]
+        for i in range(len(coors)):
+            x, y = coors[i][0], coors[i][1]
+            tile = curImg[x-size:x+size, y-size:y+size]
+            cv2.imshow(f"Tile {i}", tile)
+            cv2.waitKey(1)
+            tile_gray = cv2.cvtColor(tile, cv2.COLOR_BGR2GRAY)
+            method = cv2.TM_SQDIFF
+            res = cv2.matchTemplate(tile_gray, self.empty_tile, method)
+            _, max_val, _, _ = cv2.minMaxLoc(res)
+            if max_val > worst[0]:
+                worst = [max_val, i]
+            print(f"Score {i}: {max_val}")
+        print(f"Worst {worst[1]}: {worst[0]}")
+        cv2.destroyAllWindows()
+        return worst[1]
+
+    def find_occupied_tile_by_color_variation(self, coors):
+        """
+        Finds the coordinates of the troop by calculating the total color
+        variation (standard deviation) of each tile. The tile with the highest
+        variation is considered the one with the troop.
+        
+        Returns:
+            tuple: A tuple (x, y) of the top-left corner of the troop's tile,
+                   or None if no significant variation is found.
+        """
+        size = 30  # The size of the tile to analyze
+        worst = [0, None] # [highest_variation_score, index_of_tile]
+        
+        print("Analyzing tiles for color variation...")
+        
+        # Iterate through each of the 20 possible board coordinates
+        for i in range(len(coors)):
+            x, y = coors[i]
+            x = round(x*2.05)
+            y = round(y*2.02)
             
+            # Extract the tile from the screenshot using the size
+            tile = self.img[y - size:y + size, x - size:x + size]
+            #cv2.imshow(f"Tile {i}", tile)
+            #cv2.waitKey(0)
+            
+            # Check if the tile is a valid image (not empty)
+            if tile.size == 0:
+                print(f"Warning: Tile at index {i} is empty.")
+                continue
+
+            # Calculate the standard deviation for each color channel (B, G, R)
+            b_std = np.std(tile[:,:,0])
+            g_std = np.std(tile[:,:,1])
+            r_std = np.std(tile[:,:,2])
+            
+            # Calculate a total color variation score.
+            # We use a simple sum as a measure of total variation.
+            total_variation = b_std + g_std + r_std
+            
+            print(f"Tile {i} at ({x}, {y}): Variation Score = {total_variation:.2f}")
+
+            # Find the tile with the highest color variation
+            if total_variation > worst[0]:
+                worst[0] = total_variation
+                worst[1] = i
+        #cv2.destroyAllWindows()
+        print(f"Highest variation found at tile {worst[1]} with a score of {worst[0]:.2f}")
+        
+        # A simple threshold to avoid false positives on empty tiles with slight variations.
+        # You may need to adjust this value based on your game's visuals.
+        return worst[1]
+
 
     '''
     def read_elixir_from_image(self, elixir_image):
