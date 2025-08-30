@@ -1,3 +1,4 @@
+import datetime
 import os
 import cv2
 import pytesseract
@@ -5,14 +6,42 @@ import numpy as np
 import math
 
 class Vision():
-    def __init__(self, imgPath):
-        self.img = cv2.cvtColor(cv2.imread(imgPath), cv2.COLOR_BGR2RGB)
+    def __init__(self):
+        self.img = None
         self.startImg1 = cv2.cvtColor(cv2.imread("start.png"), cv2.COLOR_BGR2RGB)
         self.startImg2 = cv2.cvtColor(cv2.imread("start1.png"), cv2.COLOR_BGR2RGB)
         self.play_again = cv2.cvtColor(cv2.imread("play_again.png"), cv2.COLOR_BGR2RGB)
         self.empty_tile = cv2.cvtColor(cv2.imread("tile.png"), cv2.COLOR_BGR2GRAY)
         self.quit = cv2.cvtColor(cv2.imread("quit.png"), cv2.COLOR_BGR2RGB)
         pytesseract.pytesseract.tesseract_cmd = 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'
+
+        self.templates = {}
+        for filename in os.listdir("Templates"):
+            if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp')):
+                template_path = os.path.join("Templates", filename)
+                template = cv2.cvtColor(cv2.imread(template_path), cv2.COLOR_BGR2RGB)
+                if template is not None:
+                    # Store the template with its name (without extension)
+                    self.templates[filename[:-4]] = template
+        
+        self.ranks = []
+        for filename in os.listdir("Ranks"):
+            if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp')):
+                rank_path = os.path.join("Ranks", filename)
+                rank = cv2.cvtColor(cv2.imread(rank_path), cv2.COLOR_BGR2RGB)
+                if rank is not None:
+                    self.ranks.append(rank)
+        
+        self.health = []
+        for filename in os.listdir("Health"):
+            if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp')):
+                health_path = os.path.join("Health", filename)
+                h = cv2.cvtColor(cv2.imread(health_path), cv2.COLOR_BGR2GRAY)
+                if h is not None:
+                    self.health.append(h)
+    
+    def setImg(self, imgPath):
+        self.img = cv2.cvtColor(cv2.imread(imgPath), cv2.COLOR_BGR2RGB)
 
     def findStart(self):
         curImg = self.img
@@ -26,7 +55,7 @@ class Vision():
         return max(max_val1, max_val2) >= threshold
 
     def findEnd(self):
-        curImg = self.img
+        curImg = self.img[1400:1550, 110:460]
         threshold = 0.55
         method = cv2.TM_CCOEFF_NORMED
         res = cv2.matchTemplate(curImg, self.play_again, method)
@@ -35,7 +64,7 @@ class Vision():
         return max_val >= threshold
     
     def findQuit(self):
-        curImg = self.img
+        curImg = self.img[1350:1550, 200:700]
         threshold = 0.43
         method = cv2.TM_CCOEFF_NORMED
         res = cv2.matchTemplate(curImg, self.quit, method)
@@ -43,8 +72,33 @@ class Vision():
 
         return max_val >= threshold
 
+    def findRank(self):
+        curImg = self.img[180:420, 320:580]
+        method = cv2.TM_CCOEFF_NORMED
+        best_score = 0
+        best = 1
+        for i in range(len(self.ranks)):
+            res = cv2.matchTemplate(curImg, self.ranks[i], method)
+            _, max_val, _, _ = cv2.minMaxLoc(res)
+            if max_val > best_score:
+                best_score = max_val
+                best = i+1
+        return best
     
-    def findTemps(self, templates):
+    def findHealth(self):
+        curImg = self.img[1020:1060, 745:775]
+        curImgGray = cv2.cvtColor(curImg, cv2.COLOR_RGB2GRAY)
+        cv2.imshow("Image", curImg)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+        method = cv2.TM_CCOEFF_NORMED
+        for i in range(len(self.health)):
+            res = cv2.matchTemplate(curImgGray, self.health[i], method)
+            _, max_val, _, _ = cv2.minMaxLoc(res)
+            print(f"{i+1}: {max_val}")
+
+    
+    def findTemps(self):
         #define variables
         curImg = self.img
         threshold = 0.49
@@ -52,34 +106,31 @@ class Vision():
 
         #returns 1510 675 around 2.1
         elixir_img = curImg[1482:1542, 630:720]
+        cards_img = curImg[1350:1600, 150:600]
         cardCoors = []
 
-        #check to see which templates are in current game state
-        for filename in os.listdir(templates):
-            if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp')):
-                template_path = os.path.join(templates, filename)
-                template = cv2.cvtColor(cv2.imread(template_path), cv2.COLOR_BGR2RGB)
-                
-                if template is not None:
-                    # Get the width and height of the template
-                    _, w, h = template.shape[::-1]
-                    
-                    # Perform the template matching
-                    res = cv2.matchTemplate(curImg, template, method)
-                    
-                    # Find the maximum correlation value and its location
-                    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
-                    
-                    # Check if the maximum value is above our confidence threshold
-                    if max_val >= threshold:
-                        print(f"Match found for '{filename}' with a confidence of {max_val:.2f} at location {max_loc}")
-                        # You can now take action, like drawing a rectangle
-                        top_left = max_loc
-                        x,y = top_left[0], top_left[1]
-                        bottom_right = (x+w, y+h)
-                        cv2.rectangle(curImg, top_left, bottom_right, (0, 255, 0), 2)
+        i = 1
 
-                        cardCoors.append([filename[:-4], y+(h/2), x+(w/2)])
+        #check to see which templates are in current game state
+        for name, template in self.templates.items():
+            _, w, h = template.shape[::-1]
+            
+            # Perform the template matching
+            res = cv2.matchTemplate(cards_img, template, method)
+            
+            # Find the maximum correlation value and its location
+            min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+            
+            # Check if the maximum value is above our confidence threshold
+            if max_val >= threshold:
+                print(f"Match found for '{name}' with a confidence of {max_val:.2f} at location {max_loc}")
+                # You can now take action, like drawing a rectangle
+                top_left = max_loc
+                x,y = top_left[0], top_left[1]
+                bottom_right = (x+w, y+h)
+
+                cardCoors.append([i, y+(h/2), x+(w/2)])
+                i += 1
         """
         # You can now show the image with the matches highlighted
         scale_percent = 40
@@ -199,19 +250,42 @@ class Vision():
             # We use a simple sum as a measure of total variation.
             total_variation = b_std + g_std + r_std
             
-            print(f"Tile {i} at ({x}, {y}): Variation Score = {total_variation:.2f}")
+            #print(f"Tile {i} at ({x}, {y}): Variation Score = {total_variation:.2f}")
 
             # Find the tile with the highest color variation
             if total_variation > worst[0]:
                 worst[0] = total_variation
                 worst[1] = i
         #cv2.destroyAllWindows()
-        print(f"Highest variation found at tile {worst[1]} with a score of {worst[0]:.2f}")
         
         # A simple threshold to avoid false positives on empty tiles with slight variations.
         # You may need to adjust this value based on your game's visuals.
         return worst[1]
-
+    
+    # For Debugging Purposes and Stuff
+    def showImage(self, y1, y2, x1, x2):
+        img = self.img[y1:y2, x1:x2]
+        
+        output_dir = "Health"
+        
+        # Check if the folder exists, and create it if it doesn't
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+            print(f"Created folder: {output_dir}")
+        
+        # Create a unique filename using a timestamp
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        filename = f"health_image_{timestamp}.png"
+        file_path = os.path.join(output_dir, filename)
+        
+        # Save the image to the new folder
+        cv2.imwrite(file_path, img)
+        print(f"Image saved to: {file_path}")
+        
+        
+        cv2.imshow('Img', img)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
 
     '''
     def read_elixir_from_image(self, elixir_image):
