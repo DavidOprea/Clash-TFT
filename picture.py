@@ -25,7 +25,7 @@ class Photography():
         try:
             if os.path.exists(file_path):
                 os.remove(file_path)
-                print(f"File deleted successfully: {file_path}")
+                #print(f"File deleted successfully: {file_path}")
             else:
                 print(f"Error: The file {file_path} does not exist.")
         except OSError as e:

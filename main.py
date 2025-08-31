@@ -28,7 +28,8 @@ def main():
     # Use make_vec_env to create a vectorized environment, which is
     # more efficient for training with SB3.
     # Note: If your env is not in a separate file, you can pass the class directly.
-    
+    model_path = "checkpoints\ppo_clash_merge_10000_steps.zip"
+
     def make_env():
         env = ClashMergeEnv()
         # The Monitor wrapper logs episode rewards and lengths.
@@ -50,7 +51,13 @@ def main():
     # "MlpPolicy" means we use a multi-layer perceptron (a standard neural network)
     # as the policy network.
     model = PPO("MultiInputPolicy", env, verbose=1, tensorboard_log="./ppo_tensorboard/")
-    
+
+    '''
+    print(f"Loading model from '{model_path}'...")
+    model = PPO.load(model_path, env=env, device="cpu")
+    print("Model loaded successfully. Continuing training...")
+    '''
+
     # 3. Start the training process
     # This is the core of the RL implementation. The agent will interact with the game,
     # collect data, and update its neural network to maximize rewards.
@@ -83,7 +90,7 @@ def main():
     print(f"Mean reward over 10 episodes: {mean_reward:.2f} +/- {std_reward:.2f}")
 
 
-def OldMain():
+def maiinn():
     #Set up everything
     photographer = picture.Photography()
     mouse = mouse_control.Mouse()
@@ -107,7 +114,7 @@ def OldMain():
             ans = input()
 
             #1020, 1060, 745, 775
-            detect.findStart()
+            detect.findBattle()
         
             photographer.deletePicture(filename)
 

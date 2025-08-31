@@ -3,7 +3,7 @@ import os
 import cv2
 import pytesseract
 import numpy as np
-import math
+import time
 
 class Vision():
     def __init__(self):
@@ -11,6 +11,7 @@ class Vision():
         self.startImg1 = cv2.cvtColor(cv2.imread("start.png"), cv2.COLOR_BGR2RGB)
         self.startImg2 = cv2.cvtColor(cv2.imread("start1.png"), cv2.COLOR_BGR2RGB)
         self.play_again = cv2.cvtColor(cv2.imread("play_again.png"), cv2.COLOR_BGR2RGB)
+        self.battle = cv2.cvtColor(cv2.imread("battle.png"), cv2.COLOR_BGR2RGB)
         self.empty_tile = cv2.cvtColor(cv2.imread("tile.png"), cv2.COLOR_BGR2GRAY)
         self.quit = cv2.cvtColor(cv2.imread("quit.png"), cv2.COLOR_BGR2RGB)
         pytesseract.pytesseract.tesseract_cmd = 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'
@@ -41,10 +42,22 @@ class Vision():
                     self.health.append(h)
     
     def setImg(self, imgPath):
-        self.img = cv2.cvtColor(cv2.imread(imgPath), cv2.COLOR_BGR2RGB)
+        max_retries = 5
+        retry_delay = 0.5  # seconds
+        
+        for _ in range(max_retries):
+            try:
+                img_bgr = cv2.imread(imgPath)
+                if img_bgr is not None and not img_bgr.size == 0:
+                    self.img = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+                    return
+                else:
+                    time.sleep(retry_delay)
+            except Exception as e:
+                time.sleep(retry_delay)
 
     def findStart(self):
-        curImg = self.img
+        curImg = self.img[500:700, 320:480]
         threshold = 0.64
         method = cv2.TM_CCOEFF_NORMED
         res = cv2.matchTemplate(curImg, self.startImg1, method)
@@ -70,6 +83,14 @@ class Vision():
         res = cv2.matchTemplate(curImg, self.quit, method)
         _, max_val, _, _ = cv2.minMaxLoc(res)
 
+        return max_val >= threshold
+
+    def findBattle(self):
+        curImg = self.img
+        threshold = 0.45
+        method = cv2.TM_CCOEFF_NORMED
+        res = cv2.matchTemplate(curImg, self.battle, method)
+        _, max_val, _, _ = cv2.minMaxLoc(res)
         return max_val >= threshold
 
     def findRank(self):
@@ -104,7 +125,7 @@ class Vision():
     def findTemps(self):
         #define variables
         curImg = self.img
-        threshold = 0.45
+        threshold = 0.4
         method = cv2.TM_CCOEFF_NORMED
 
         #returns 1510 675 around 2.1
@@ -126,7 +147,7 @@ class Vision():
             
             # Check if the maximum value is above our confidence threshold
             if max_val >= threshold:
-                print(f"Match found for '{name}' with a confidence of {max_val:.2f} at location {max_loc}")
+                #print(f"Match found for '{name}' with a confidence of {max_val:.2f} at location {max_loc}")
                 # You can now take action, like drawing a rectangle
                 top_left = max_loc
                 x,y = top_left[0], top_left[1]
