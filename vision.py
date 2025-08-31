@@ -45,7 +45,7 @@ class Vision():
 
     def findStart(self):
         curImg = self.img
-        threshold = 0.55
+        threshold = 0.64
         method = cv2.TM_CCOEFF_NORMED
         res = cv2.matchTemplate(curImg, self.startImg1, method)
         _, max_val1, _, _ = cv2.minMaxLoc(res)
@@ -55,7 +55,7 @@ class Vision():
         return max(max_val1, max_val2) >= threshold
 
     def findEnd(self):
-        curImg = self.img[1400:1550, 110:460]
+        curImg = self.img
         threshold = 0.55
         method = cv2.TM_CCOEFF_NORMED
         res = cv2.matchTemplate(curImg, self.play_again, method)
@@ -64,7 +64,7 @@ class Vision():
         return max_val >= threshold
     
     def findQuit(self):
-        curImg = self.img[1350:1550, 200:700]
+        curImg = self.img
         threshold = 0.43
         method = cv2.TM_CCOEFF_NORMED
         res = cv2.matchTemplate(curImg, self.quit, method)
@@ -88,20 +88,23 @@ class Vision():
     def findHealth(self):
         curImg = self.img[1020:1060, 745:775]
         curImgGray = cv2.cvtColor(curImg, cv2.COLOR_RGB2GRAY)
-        cv2.imshow("Image", curImg)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
         method = cv2.TM_CCOEFF_NORMED
+        best_score = 0
+        best = 1
         for i in range(len(self.health)):
             res = cv2.matchTemplate(curImgGray, self.health[i], method)
             _, max_val, _, _ = cv2.minMaxLoc(res)
-            print(f"{i+1}: {max_val}")
+            if max_val > best_score:
+                best_score = max_val
+                best = i+1
+                
+        return best
 
     
     def findTemps(self):
         #define variables
         curImg = self.img
-        threshold = 0.49
+        threshold = 0.45
         method = cv2.TM_CCOEFF_NORMED
 
         #returns 1510 675 around 2.1
@@ -130,7 +133,9 @@ class Vision():
                 bottom_right = (x+w, y+h)
 
                 cardCoors.append([i, y+(h/2), x+(w/2)])
-                i += 1
+
+            i += 1
+
         """
         # You can now show the image with the matches highlighted
         scale_percent = 40

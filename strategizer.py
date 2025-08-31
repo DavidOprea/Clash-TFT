@@ -14,9 +14,9 @@ class Decider():
                       "golden knight" : 5, "archer queen" : 5}
         self.on_field = []
         self.board = [[135, 440], [180, 440], [225, 440], [270, 440], [315, 440], 
-                      [155, 470], [200, 470], [245, 470], [290, 470], [335, 470], 
+                      [155, 470], [200, 470], [245, 470], [290, 470],
                       [135, 500], [180, 500], [225, 500], [270, 500], [315, 500],
-                      [175, 530], [200, 530], [245, 530], [290, 530], [335, 530]]
+                      [175, 530], [200, 530], [245, 530], [290, 530]]
         self.curMax = 2
         self.mouse = mouse_control.Mouse()
     
@@ -33,7 +33,7 @@ class Decider():
         self.curMax += 1
     
     def sellTroop(self, loc):
-        spots = [[325, 200], [325, 250], [325, 300], [325, 350], [325, 400], [325, 450], [325, 500]]
+        spots = [[325, 200], [325, 250], [325, 300], [325, 350], [325, 400], [325, 450]]
         self.mouse.left_click(self.board[loc][0], self.board[loc][1])
         for spot in spots:
             self.mouse.left_click(spot[0], spot[1])
