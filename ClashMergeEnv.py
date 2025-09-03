@@ -1,5 +1,5 @@
 '''
-These are the card/team encodings to their corresponding number
+These are the card encodings to their corresponding number
 1 : archer queen
 2 : archer
 3 : bandit
@@ -21,6 +21,7 @@ These are the card/team encodings to their corresponding number
 19 : spear goblin
 20 : valkyrie
 
+These are the type/team encodings to their corresponding number
 0: Ranger
 1: Ace
 2: Clan
@@ -45,10 +46,6 @@ from strategizer import Decider
 import mouse_control
 
 class ClashMergeEnv(gym.Env):
-    """
-    A custom environment for the Clash Merge Tactics game that follows the gym interface.
-    This class connects the game's state to a reinforcement learning algorithm.
-    """
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 4}
     
     def __init__(self):
@@ -92,37 +89,27 @@ class ClashMergeEnv(gym.Env):
         self.start = True
         self.cardLimit = 2
         self.curCards = 0
+        self.passes = 0
         
         # Define the state space (what the agent sees).
-        # We'll use a simple multi-dimensional array for now.
-        # This will contain elixir count, card state, and a board representation.
-        # The numbers here are placeholders; you'll need to determine the correct dimensions.
         self.observation_space = spaces.Dict({
             "elixir": spaces.Box(0, 20, shape=(1,), dtype=np.float32),
             "hand_cards": spaces.MultiDiscrete([21, 21, 21]),  # Assuming 20 unique cards
             "board_state": spaces.Box(low=0, high=100, shape=(18,), dtype=np.int64) # 5, 4, 5, 4
         })
 
-        # --- UPDATED: Action Space with "Do Nothing" Action ---
-        # We now have a larger discrete space to include the "wait" action.
-        # The total number of play card actions (5 * 4 * 10) plus one for "do nothing".
         self.total_card_actions = 18 * 3
         self.action_space = spaces.Discrete(self.total_card_actions + 1)
 
         self.current_state = None
         self.current_health = 9
 
-        # --- NEW: Track the number of actions taken this turn ---
         self.actions_this_turn = 0
-        # --- NEW: Track the reward accumulated within the current turn ---
+
         self.turn_reward = 0
 
     def _get_obs(self):
-        """
-        Gathers and processes the current game state from the Vision class.
-        This is where you would call your vision methods.
-        """
-        # Call your vision methods to get the game data.
+        # Call the vision methods to get the game data.
         self.filename = self.photographer.takePicture()
         self.vision.setImg(self.filename)
 
@@ -141,20 +128,14 @@ class ClashMergeEnv(gym.Env):
         # Return a dictionary matching the observation_space definition.
         return {
             "elixir": np.array([float(elixir)]),
-            "hand_cards": np.array([cardCoors[0][0], cardCoors[1][0], cardCoors[2][0]]), # Placeholder for card recognition
+            "hand_cards": np.array([cardCoors[0][0], cardCoors[1][0], cardCoors[2][0]]), 
             "board_state": self.board_state
         }
     
     def reset(self, seed=None, options=None):
-        """
-        Resets the environment to its initial state.
-        This method is called at the beginning of each new game.
-        """
         super().reset(seed=seed)
         
         # Simulate a game reset. Here you would trigger the "start game" button.
-        # For a real implementation, you would use your Vision class to click the start button.
-        # For now, we'll just set up an initial state.
 
         self.current_health = 9
         self.start = True
@@ -177,12 +158,18 @@ class ClashMergeEnv(gym.Env):
         #print(self.curCards)
         #print(self.cardLimit)
 
+        if self.passes >= 150:
+            for _ in range(60):
+                self.mouse.left_click(250, 600)
+            self.passes = 0
+
         if self.vision.findQuit():
             # If the game is over, the agent can't do anything.
             reward = 0
-            self.mouse.left_click(150, 700) # Click the quit
+            self.mouse.left_click(150, 700) # Click quit
             if not self.sell:
-                reward = self._get_reward_for_round(True) # Find the rank
+                reward = self._get_reward_for_round(True)
+            time.sleep(1)
             self.mouse.left_click(150, 700) # Click the play again button
             if self.filename:
                 self.photographer.deletePicture(self.filename)
@@ -191,25 +178,24 @@ class ClashMergeEnv(gym.Env):
             reward = 0
             if not self.sell:
                 reward = self._get_reward_for_round(True) # Find the rank
-            self.mouse.left_click(150, 700) # Click the play again button
+            time.sleep(1)
+            self.mouse.left_click(150, 700)
             if self.filename:
                 self.photographer.deletePicture(self.filename)
             return self.current_state, reward, True, False, {}
         elif self.vision.findBattle():
             reward = 0
-            for _ in range(61):
-                self.mouse.left_click(250, 600) # Click the battle button
+            self.mouse.left_click(250, 600) # Click the battle button
             if self.filename:
                 self.photographer.deletePicture(self.filename)
             return self.current_state, reward, True, False, {}
         
         findStart = self.vision.findStart()
-        # --- UPDATED: Handle the "Do Nothing" action ---
+
         if action == self.total_card_actions or (not findStart):
             print("Agent chose to end turn.")
-            # This is where the game would advance to the next round.
-            # We calculate and return the total reward for the round.
-            # reward = self._get_reward_for_round() - I'LL DO THIS IN MAIN PROBABLY
+            self.passes += 1
+  
             reward = 0
 
             if not findStart:
@@ -218,15 +204,16 @@ class ClashMergeEnv(gym.Env):
             # Reset counters for the next turn.
             self.actions_this_turn = 0
         elif self.current_state and self.current_state["hand_cards"][0] != 0:
-            # Here's where you would translate the action index into a game command.
-            # For example, if action = 10, you might play the second card at the third location.
-            # You would use your mouse_drag_script to perform the action.
+            # Here's where I translate the action index into a game command.
+            self.passes = 0
             reward = 1
+            # Agent sells at beginning to make determining board state easier
             if self.sell:
                 loc = self.vision.find_occupied_tile_by_color_variation(self.decider.board)
                 self.decider.sellTroop(loc)
                 self.sell = False
                 self.start = False
+            # If round started which isn't the first round
             elif self.start:
                 if self.cardLimit < 6:
                     self.cardLimit += 1
@@ -237,11 +224,12 @@ class ClashMergeEnv(gym.Env):
             self.start = False
             self.actions_this_turn += 1
 
-            # Add logic to execute the play/merge action here.
+            # Logic to execute the play/merge action here.
             pos = action % 18
             cardPos = (action // 18)
             card = self.current_state["hand_cards"][cardPos]
 
+            # Punish if agent plays in occupied state or with not enough elixir or unnecessary card
             if self.board_state[pos] != 0 and self.board_state[pos] != card:
                 reward -= 5
             elif self.current_state["elixir"] < self.costs[card]:
@@ -249,9 +237,15 @@ class ClashMergeEnv(gym.Env):
             elif (not (card in self.board_state)) and ((self.curCards < 6 and self.curCards >= self.cardLimit) or self.current_state["elixir"] < self.costs[card]):
                 reward -= 5
             else:
-                # encourage merging
+                # Encourage merging
+                ok = True
+                if self.curCards >= 6:
+                    for c in self.current_state["hand_cards"]:
+                        if c in self.board_state:
+                            ok = False
                 if card in self.board_state:
                     reward += 5
+                    ok = True
                 elif self.curCards < 7:
                     self.board_state[pos] = card
                     self.curCards += 1
@@ -263,10 +257,10 @@ class ClashMergeEnv(gym.Env):
                             reward += 10
                         elif self.combo_counts[trait] == 4:
                             reward += 30
-
-                self.mouse.drag_card(self.coors[cardPos][0], self.coors[cardPos][1], self.board[pos][0], self.board[pos][1])
+                if(ok):
+                    self.mouse.drag_card(self.coors[cardPos][0], self.coors[cardPos][1], self.board[pos][0], self.board[pos][1])
             
-        # After the action, you would check the game state again.
+        # After the action, check the game state again.
         observation = self._get_obs()
         
         self.current_state = observation
@@ -282,11 +276,7 @@ class ClashMergeEnv(gym.Env):
         """
         Calculates the reward based on the current action and observation.
         """
-        # A very basic, conceptual reward function.
-        # You'll need to expand on this significantly.
-        
-        # Placeholder for your vision logic to get the game result.
-        
+
         if over:
             player_rank = self.vision.findRank()
             # Assign a reward based on the rank.
@@ -299,6 +289,7 @@ class ClashMergeEnv(gym.Env):
             else:
                 return -200 # Heavy penalty for fourth/loss
         else:
+            # Reward for losing/keeping health
             new_health = self.vision.findHealth()
             health_change = self.current_health - new_health
             if health_change > 0:
@@ -313,12 +304,4 @@ class ClashMergeEnv(gym.Env):
         Optional: Displays the current game screen.
         """
         if mode == "human":
-            # You would implement this to show the game screen in a window for debugging.
-            # For a headless environment, this is not necessary.
             pass
-
-    def close(self):
-        """
-        Cleans up the environment, if necessary.
-        """
-        pass
