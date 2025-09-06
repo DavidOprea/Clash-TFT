@@ -55,7 +55,7 @@ class ClashMergeEnv(gym.Env):
         self.photographer = Photography()
         self.filename = None
         
-        # Initialize the Vision class from your existing code.
+        # Initialize the Vision class
         self.vision = Vision()
 
         # Initialize the mouse control
@@ -72,9 +72,9 @@ class ClashMergeEnv(gym.Env):
                       [135, 500], [180, 500], [225, 500], [270, 500], [315, 500],
                       [175, 530], [200, 530], [245, 530], [290, 530]]
         self.card_traits = {1: [2, 7], 2: [0, 2], 3: [1, 7], 4: [2, 8], 5: [5, 10], 6: [3, 0], 
-                           7: [1, 10], 8: [5, 8], 9: [3, 9], 10: [3, 6], 11: [4, 6], 12: [4, 9], 
-                           13: [1, 8], 14: [1, 9], 15: [4, 8], 16: [0, 4], 17: [5, 6], 
-                           18: [5, 9], 19: [3, 10], 20: [2, 7]}
+                            7: [1, 10], 8: [5, 8], 9: [3, 9], 10: [3, 6], 11: [4, 6], 12: [4, 9], 
+                            13: [1, 8], 14: [1, 9], 15: [4, 8], 16: [0, 4], 17: [5, 6], 
+                            18: [5, 9], 19: [3, 10], 20: [2, 7]}
         self.costs = {12 : 2, 2 : 2, 10 : 2, 
                       19 : 2, 5 : 2,
                       4 : 2, 20 : 3, 
@@ -84,18 +84,20 @@ class ClashMergeEnv(gym.Env):
                       9 : 4, 18 : 5,
                       11 : 5, 1 : 5}
         self.combo_counts = {i: 0 for i in range(11)}
+        self.counts = {i:0 for i in range(21)}
         self.threes = [0, 6, 7, 10] # the unique teams which only work with threes, others are twos and fours. 
         self.sell = True
         self.start = True
         self.cardLimit = 2
         self.curCards = 0
         self.passes = 0
+        self.over = False
         
         # Define the state space (what the agent sees).
         self.observation_space = spaces.Dict({
             "elixir": spaces.Box(0, 20, shape=(1,), dtype=np.float32),
-            "hand_cards": spaces.MultiDiscrete([21, 21, 21]),  # Assuming 20 unique cards
-            "board_state": spaces.Box(low=0, high=100, shape=(18,), dtype=np.int64) # 5, 4, 5, 4
+            "hand_cards": spaces.MultiDiscrete([21, 21, 21]), 
+            "board_state": spaces.Box(low=0, high=100, shape=(18,), dtype=np.int64)
         })
 
         self.total_card_actions = 18 * 3
@@ -134,14 +136,15 @@ class ClashMergeEnv(gym.Env):
     
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
-        
-        # Simulate a game reset. Here you would trigger the "start game" button.
 
-        self.current_health = 9
-        self.start = True
-        self.sell = True
-        self.cardLimit = 2
-        self.curCards = 0
+        if self.over:
+            self.current_health = 9
+            self.start = True
+            self.sell = True
+            self.cardLimit = 2
+            self.curCards = 0
+            self.over = False
+
         observation = self._get_obs()
         info = {}
         self.board_state = np.zeros(18, dtype=np.int8) 
@@ -155,47 +158,47 @@ class ClashMergeEnv(gym.Env):
         terminated = False
         reward = -0.02
 
-        #print(self.curCards)
-        #print(self.cardLimit)
-
         if self.passes >= 150:
             for _ in range(60):
                 self.mouse.left_click(250, 600)
             self.passes = 0
 
-        if self.vision.findQuit():
-            # If the game is over, the agent can't do anything.
+        if self.vision.findEnd():
             reward = 0
-            self.mouse.left_click(150, 700) # Click quit
-            if not self.sell:
-                reward = self._get_reward_for_round(True)
-            time.sleep(1)
-            self.mouse.left_click(150, 700) # Click the play again button
-            if self.filename:
-                self.photographer.deletePicture(self.filename)
-            return self.current_state, reward, True, False, {}
-        elif self.vision.findEnd():
-            reward = 0
-            if not self.sell:
-                reward = self._get_reward_for_round(True) # Find the rank
             time.sleep(1)
             self.mouse.left_click(150, 700)
             if self.filename:
                 self.photographer.deletePicture(self.filename)
             return self.current_state, reward, True, False, {}
-        elif self.vision.findBattle():
+        elif self.vision.findQuit():
             reward = 0
+            self.mouse.left_click(150, 700) # Click quit
+            time.sleep(1)
+            if not self.sell:
+                self._get_obs()
+                print("REWARD")
+                self.over = True
+                reward = self._get_reward_for_round() 
+                print(reward)
+            self.mouse.left_click(150, 700)
+            time.sleep(1)
+            return self.current_state, reward, True, False, {}
+        elif self.vision.findBattle():
+            # **REWARD IS NOW GIVEN HERE!**
+            # This is where we calculate the reward for the round just completed.
+            reward = self._get_reward_for_round()
             self.mouse.left_click(250, 600) # Click the battle button
             if self.filename:
                 self.photographer.deletePicture(self.filename)
+            # The round is over, so we return the new state and the reward.
             return self.current_state, reward, True, False, {}
-        
+
         findStart = self.vision.findStart()
 
         if action == self.total_card_actions or (not findStart):
             print("Agent chose to end turn.")
             self.passes += 1
-  
+    
             reward = 0
 
             if not findStart:
@@ -206,19 +209,24 @@ class ClashMergeEnv(gym.Env):
         elif self.current_state and self.current_state["hand_cards"][0] != 0:
             # Here's where I translate the action index into a game command.
             self.passes = 0
-            reward = 1
+            reward = 0.5 # Small bonus for a valid action instead of a pass
+            
             # Agent sells at beginning to make determining board state easier
             if self.sell:
                 loc = self.vision.find_occupied_tile_by_color_variation(self.decider.board)
-                self.decider.sellTroop(loc)
+                self.decider.sellTroop(loc, True)
                 self.sell = False
                 self.start = False
             # If round started which isn't the first round
             elif self.start:
                 if self.cardLimit < 6:
                     self.cardLimit += 1
-                reward = self._get_reward_for_round(False)
+                print("ROUND REWARD")
+                reward = self._get_reward_for_round()
                 self.start = False
+                terminated = True
+                observation = self._get_obs()
+                return observation, reward, terminated, False, {}
 
             print(f"Agent took action: {action}")
             self.start = False
@@ -231,35 +239,47 @@ class ClashMergeEnv(gym.Env):
 
             # Punish if agent plays in occupied state or with not enough elixir or unnecessary card
             if self.board_state[pos] != 0 and self.board_state[pos] != card:
-                reward -= 5
+                reward = -0.05
             elif self.current_state["elixir"] < self.costs[card]:
-                reward -= 5
+                reward = -0.05
             elif (not (card in self.board_state)) and ((self.curCards < 6 and self.curCards >= self.cardLimit) or self.current_state["elixir"] < self.costs[card]):
-                reward -= 5
+                reward = -0.05
             else:
-                # Encourage merging
+                # Encourage merging with a small, consistent bonus
                 ok = True
+                self.counts[card] += 1
                 if self.curCards >= 6:
                     for c in self.current_state["hand_cards"]:
                         if c in self.board_state:
                             ok = False
                 if card in self.board_state:
-                    reward += 5
+                    reward = 1.0 # Smaller, more stable reward for a merge
                     ok = True
-                elif self.curCards < 7:
+                elif self.curCards < 6:
                     self.board_state[pos] = card
                     self.curCards += 1
                     for trait in self.card_traits[card]:
                         self.combo_counts[trait] += 1
                         if trait in self.threes and self.combo_counts[trait] == 3:
-                            reward += 20
-                        elif self.combo_counts[trait] == 2:
-                            reward += 10
+                            reward += 2.0 # Modest bonus for a combo
+                        elif not (trait in self.threes) and self.combo_counts[trait] == 2:
+                            reward += 1.0 # Modest bonus for a combo
                         elif self.combo_counts[trait] == 4:
-                            reward += 30
-                if(ok):
+                            reward += 3.0 # A slightly larger bonus for a bigger combo
+                else:
+                    self.curCards += 1
+
+                if ok:
                     self.mouse.drag_card(self.coors[cardPos][0], self.coors[cardPos][1], self.board[pos][0], self.board[pos][1])
-            
+
+                    if self.curCards > 6:
+                        p = 18
+                        for i in range(1, 21):
+                            p += max(0, bin(self.counts[i]).count('1') - 1)
+                        print(p)
+                        if p < 23:
+                            self.decider.sellTroop(p, False)
+
         # After the action, check the game state again.
         observation = self._get_obs()
         
@@ -272,33 +292,41 @@ class ClashMergeEnv(gym.Env):
         print(f"Reward: {reward}")
         return observation, reward, terminated, False, info
 
-    def _get_reward_for_round(self, over):
+    def _get_reward_for_round(self):
         """
         Calculates the reward based on the current action and observation.
+        The reward values have been normalized to a smaller range for more stable training.
         """
 
-        if over:
+        if self.over:
             player_rank = self.vision.findRank()
+            print(f"RANK: {player_rank}")
             # Assign a reward based on the rank.
             if player_rank == 1:
-                return 200 # Huge reward for winning
+                return 20.0 # Decent reward for winning
             elif player_rank == 2:
-                return 100 # Decent reward for second place
+                return 10.0 # Small reward for second place
             elif player_rank == 3:
-                return -100 # Small penalty for third
+                return -10.0 # Small Penalty for third
             else:
-                return -200 # Heavy penalty for fourth/loss
+                return -20.0 # Penalty for fourth/loss
         else:
             # Reward for losing/keeping health
             new_health = self.vision.findHealth()
             health_change = self.current_health - new_health
-            if health_change > 0:
+            print("HEALTH")
+            print(self.current_health)
+            print(new_health)
+            if health_change > 0 and health_change < 6: #inaccurate readings occur, so preventing crazy penalties
                 self.current_health = new_health
-                return -10 * health_change
+                return -1.0 * health_change # Small penalty for taking damage
+            elif health_change >= 6:
+                self.current_health -= 3.0
+                return -3.0
             else:
                 self.current_health = new_health
-                return 30
-
+                return 1.0 # Small bonus for surviving a round without damage
+        
     def render(self, mode="human"):
         """
         Optional: Displays the current game screen.

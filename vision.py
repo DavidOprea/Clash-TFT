@@ -73,12 +73,11 @@ class Vision():
     # Finds the play again button 
     def findEnd(self):
         curImg = self.img
-        threshold = 0.55
+        threshold = 0.51
         method = cv2.TM_CCOEFF_NORMED
         res = cv2.matchTemplate(curImg, self.play_again, method)
         _, max_val, _, _ = cv2.minMaxLoc(res)
-
-        return max_val >= threshold
+        return (max_val >= threshold)
     
     # Finds the quit button
     def findQuit(self):
