@@ -44,6 +44,8 @@ from vision import Vision
 from picture import Photography
 from strategizer import Decider
 import mouse_control
+import glob
+import os
 
 class ClashMergeEnv(gym.Env):
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 4}
@@ -134,20 +136,32 @@ class ClashMergeEnv(gym.Env):
             "board_state": self.board_state
         }
     
+    def _cleanup_screenshots(self):
+        """Deletes all screenshot files from the current directory."""
+        print("Cleaning up old screenshots...")
+        try:
+            for file in glob.glob("screen_*.png"):
+                os.remove(file)
+        except OSError as e:
+            print(f"Error: {e.strerror}")
+    
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
 
         if self.over:
+            self._cleanup_screenshots()
             self.current_health = 9
             self.start = True
             self.sell = True
             self.cardLimit = 2
             self.curCards = 0
             self.over = False
+            self.board_state = np.zeros(18, dtype=np.int8) 
+            self.combo_counts = {i: 0 for i in range(11)}
+            self.counts = {i:0 for i in range(21)}
 
         observation = self._get_obs()
         info = {}
-        self.board_state = np.zeros(18, dtype=np.int8) 
         return observation, info
 
     def step(self, action):
@@ -225,6 +239,8 @@ class ClashMergeEnv(gym.Env):
                 reward = self._get_reward_for_round()
                 self.start = False
                 terminated = True
+                if self.filename:
+                    self.photographer.deletePicture(self.filename)
                 observation = self._get_obs()
                 return observation, reward, terminated, False, {}
 
@@ -238,7 +254,7 @@ class ClashMergeEnv(gym.Env):
             card = self.current_state["hand_cards"][cardPos]
 
             # Punish if agent plays in occupied state or with not enough elixir or unnecessary card
-            if self.board_state[pos] != 0 and self.board_state[pos] != card:
+            if card not in self.board_state and self.board_state[pos] != 0 and self.board_state[pos] != card:
                 reward = -0.05
             elif self.current_state["elixir"] < self.costs[card]:
                 reward = -0.05
@@ -252,6 +268,7 @@ class ClashMergeEnv(gym.Env):
                     for c in self.current_state["hand_cards"]:
                         if c in self.board_state:
                             ok = False
+
                 if card in self.board_state:
                     reward = 1.0 # Smaller, more stable reward for a merge
                     ok = True

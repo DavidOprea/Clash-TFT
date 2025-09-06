@@ -143,7 +143,7 @@ class Vision():
         i = 1
 
         #check to see which templates are in current game state
-        for _, template in self.templates.items():
+        for name, template in self.templates.items():
             _, w, h = template.shape[::-1]
             
             res = cv2.matchTemplate(cards_img, template, method)

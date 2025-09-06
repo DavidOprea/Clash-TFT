@@ -39,7 +39,7 @@ def main():
     Gemini really helped with this stuff
     """
     # 1. Create the custom environment
-    model_path = "checkpoints/ppo_clash_merge_18_9500_steps.zip"
+    model_path = "checkpoints/ppo_clash_merge_21_11500_steps.zip"
 
     def make_env():
         env = ClashMergeEnv()
@@ -53,13 +53,13 @@ def main():
     
     # 2. Define and instantiate the RL model
     
-    '''
+    
     print(f"Loading model from '{model_path}'...")
     model = PPO.load(model_path, env=env, device="cpu")
     print("Model loaded successfully. Continuing training...")
-    '''
+    
 
-    model = PPO("MultiInputPolicy", env, verbose=1)
+    # model = PPO("MultiInputPolicy", env, verbose=1)
 
     # 3. Start the training process
     total_timesteps = 100000 # I can't really do millions right now
